@@ -1,35 +1,64 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState } from "react";
+import axios from "axios";
 
 const API_URL = "https://os-project-bankers-algorithm.onrender.com/api/allocate-cloud";
 
 const App = () => {
-  const [tasks, setTasks] = useState([
-    { name: "Web Server VM", allocation: [0, 1, 0], max: [7, 5, 3] },
-    { name: "Database Instance", allocation: [2, 0, 0], max: [3, 2, 2] },
-    { name: "ML Training Job", allocation: [3, 0, 2], max: [9, 0, 2] },
-    { name: "Analytics Worker", allocation: [2, 1, 1], max: [2, 2, 2] },
-    { name: "Backup Service", allocation: [0, 0, 2], max: [4, 3, 3] }
-  ]);
+  const [numTasks, setNumTasks] = useState(0);
+  const [numResources, setNumResources] = useState(0);
 
-  const [available, setAvailable] = useState([3, 3, 2]);
+  const [tasks, setTasks] = useState([]);
+  const [available, setAvailable] = useState([]);
+  const [request, setRequest] = useState([]);
+  const [taskIndex, setTaskIndex] = useState(0);
+
   const [result, setResult] = useState(null);
 
-  const updateTask = (index, type, resIndex, value) => {
-    const newVal = parseInt(value) || 0;
+  // 🔹 Initialize system
+  const initSystem = () => {
+    const newTasks = Array.from({ length: numTasks }, (_, i) => ({
+      name: `T${i}`,
+      allocation: Array(numResources).fill(0),
+      max: Array(numResources).fill(0),
+    }));
+
+    setTasks(newTasks);
+    setAvailable(Array(numResources).fill(0));
+    setRequest(Array(numResources).fill(0));
+    setResult(null);
+  };
+
+  // 🔹 Update task values
+  const updateTask = (i, type, j, value) => {
     const newTasks = [...tasks];
-    newTasks[index][type][resIndex] = newVal;
+    newTasks[i][type][j] = parseInt(value) || 0;
     setTasks(newTasks);
   };
 
+  // 🔹 Validate and call backend
   const validateSafety = async () => {
-    // Validation: Allocation <= Max
+    // Allocation <= Max
     for (let i = 0; i < tasks.length; i++) {
-      for (let j = 0; j < 3; j++) {
+      for (let j = 0; j < numResources; j++) {
         if (tasks[i].allocation[j] > tasks[i].max[j]) {
-          alert(`Error in T${i}: Allocation cannot exceed Max.`);
+          alert(`Error in T${i}: Allocation > Max`);
           return;
         }
+      }
+    }
+
+    // Request validation
+    for (let j = 0; j < numResources; j++) {
+      const need = tasks[taskIndex].max[j] - tasks[taskIndex].allocation[j];
+
+      if (request[j] > need) {
+        alert("Request exceeds need!");
+        return;
+      }
+
+      if (request[j] > available[j]) {
+        alert("Not enough available resources!");
+        return;
       }
     }
 
@@ -39,13 +68,12 @@ const App = () => {
           allocation: t.allocation,
           max: t.max
         })),
-        available: available,
-        taskIndex: 0,           // you can improve later
-        request: [1, 0, 1]      // demo request (can be dynamic later)
+        available,
+        taskIndex,
+        request
       });
 
       setResult(res.data);
-
     } catch (err) {
       console.error(err);
       alert("Backend connection failed!");
@@ -53,156 +81,148 @@ const App = () => {
   };
 
   return (
-    <div style={styles.appContainer}>
-      {/* Sidebar */}
-      <aside style={styles.sidebar}>
-        <h2 style={styles.logo}>
-          Cloud<span style={{ color: '#60a5fa' }}>Control</span>
-        </h2>
-        <p style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '2rem' }}>
-          Datacenter Resource Manager
-        </p>
-        <div style={styles.navItemActive}>🛡️ Deadlock Avoidance</div>
-      </aside>
+    <div style={{ padding: "2rem", background: "#020617", minHeight: "100vh", color: "white" }}>
+      
+      <h1>Banker's Algorithm Simulator</h1>
 
-      {/* Main */}
-      <main style={styles.mainContent}>
-        <header style={styles.header}>
-          <h1>Admission Control Dashboard</h1>
-          <p>Ensuring safe resource allocation using Banker's Algorithm</p>
-        </header>
+      {/* 🔹 Setup */}
+      <div style={{ marginBottom: "2rem" }}>
+        <input
+          type="number"
+          placeholder="Number of Tasks"
+          onChange={(e) => setNumTasks(parseInt(e.target.value) || 0)}
+        />
 
-        {/* Available */}
-        <section style={styles.statsRow}>
-          {['CPU', 'RAM', 'Storage'].map((label, i) => (
-            <div key={i} style={styles.statCard}>
-              <span style={styles.statLabel}>{label}</span>
-              <input
-                type="number"
-                value={available[i]}
-                onChange={(e) => {
-                  const next = [...available];
-                  next[i] = parseInt(e.target.value) || 0;
-                  setAvailable(next);
-                }}
-                style={styles.statInput}
-              />
-            </div>
+        <input
+          type="number"
+          placeholder="Number of Resources"
+          onChange={(e) => setNumResources(parseInt(e.target.value) || 0)}
+        />
+
+        <button onClick={initSystem}>Initialize</button>
+      </div>
+
+      {/* 🔹 Available */}
+      {available.length > 0 && (
+        <div>
+          <h3>Available Resources</h3>
+          {available.map((val, i) => (
+            <input
+              key={i}
+              type="number"
+              value={val}
+              onChange={(e) => {
+                const next = [...available];
+                next[i] = parseInt(e.target.value) || 0;
+                setAvailable(next);
+              }}
+            />
           ))}
-        </section>
-
-        <div style={styles.workspace}>
-          {/* Table */}
-          <div style={styles.tablePanel}>
-            <h3>Active Tasks</h3>
-
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>NAME</th>
-                  <th>ALLOC</th>
-                  <th>MAX</th>
-                  <th>NEED</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {tasks.map((task, i) => (
-                  <tr key={i}>
-                    <td>T{i}</td>
-                    <td>{task.name}</td>
-
-                    <td>
-                      {task.allocation.map((val, j) => (
-                        <input
-                          key={j}
-                          value={val}
-                          type="number"
-                          onChange={(e) =>
-                            updateTask(i, 'allocation', j, e.target.value)
-                          }
-                          style={styles.cellInput}
-                        />
-                      ))}
-                    </td>
-
-                    <td>
-                      {task.max.map((val, j) => (
-                        <input
-                          key={j}
-                          value={val}
-                          type="number"
-                          onChange={(e) =>
-                            updateTask(i, 'max', j, e.target.value)
-                          }
-                          style={styles.cellInput}
-                        />
-                      ))}
-                    </td>
-
-                    <td>
-                      {task.max.map((v, idx) => v - task.allocation[idx]).join(" / ")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <button onClick={validateSafety} style={styles.bigButton}>
-              VALIDATE SAFETY
-            </button>
-          </div>
-
-          {/* Result */}
-          <div style={styles.resultPanel}>
-            <h3>Result</h3>
-
-            {result ? (
-              <div style={styles.resBox}>
-                <h2 style={{ color: result.success ? 'green' : 'red' }}>
-                  {result.success ? "SAFE STATE" : "UNSAFE STATE"}
-                </h2>
-
-                <p>{result.message}</p>
-
-                {result.success && (
-                  <div>
-                    <strong>Sequence:</strong>
-                    {result.safeSequence.map((s) => (
-                      <span key={s}> T{s} </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p>Click button to analyze</p>
-            )}
-          </div>
         </div>
-      </main>
+      )}
+
+      {/* 🔹 Table */}
+      {tasks.length > 0 && (
+        <table border="1" cellPadding="10" style={{ marginTop: "1rem" }}>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Allocation</th>
+              <th>Max</th>
+              <th>Need</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {tasks.map((task, i) => (
+              <tr key={i}>
+                <td>T{i}</td>
+
+                <td>
+                  {task.allocation.map((val, j) => (
+                    <input
+                      key={j}
+                      type="number"
+                      value={val}
+                      onChange={(e) => updateTask(i, "allocation", j, e.target.value)}
+                    />
+                  ))}
+                </td>
+
+                <td>
+                  {task.max.map((val, j) => (
+                    <input
+                      key={j}
+                      type="number"
+                      value={val}
+                      onChange={(e) => updateTask(i, "max", j, e.target.value)}
+                    />
+                  ))}
+                </td>
+
+                <td>
+                  {task.max.map((v, j) => v - task.allocation[j]).join(" / ")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* 🔹 Request Section */}
+      {tasks.length > 0 && (
+        <div style={{ marginTop: "2rem" }}>
+          <h3>Request Resources</h3>
+
+          <select onChange={(e) => setTaskIndex(parseInt(e.target.value))}>
+            {tasks.map((_, i) => (
+              <option key={i} value={i}>T{i}</option>
+            ))}
+          </select>
+
+          {request.map((val, i) => (
+            <input
+              key={i}
+              type="number"
+              value={val}
+              onChange={(e) => {
+                const next = [...request];
+                next[i] = parseInt(e.target.value) || 0;
+                setRequest(next);
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 🔹 Button */}
+      {tasks.length > 0 && (
+        <div style={{ marginTop: "1rem" }}>
+          <button onClick={validateSafety}>Validate Safety</button>
+        </div>
+      )}
+
+      {/* 🔹 Result */}
+      {result && (
+        <div style={{ marginTop: "2rem" }}>
+          <h2 style={{ color: result.success ? "green" : "red" }}>
+            {result.success ? "SAFE STATE" : "UNSAFE STATE"}
+          </h2>
+
+          <p>{result.message}</p>
+
+          {result.success && (
+            <div>
+              <strong>Sequence:</strong>
+              {result.safeSequence.map((s) => (
+                <span key={s}> T{s} </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
-};
-
-const styles = {
-  appContainer: { display: 'flex', height: '100vh', background: '#020617', color: 'white' },
-  sidebar: { width: '250px', padding: '2rem', background: '#0f172a' },
-  logo: { fontSize: '1.5rem' },
-  navItemActive: { marginTop: '2rem' },
-  mainContent: { flex: 1, padding: '2rem' },
-  header: { marginBottom: '2rem' },
-  statsRow: { display: 'flex', gap: '1rem' },
-  statCard: { background: '#0f172a', padding: '1rem' },
-  statLabel: { fontSize: '0.7rem' },
-  statInput: { width: '60px' },
-  workspace: { display: 'flex', gap: '2rem' },
-  tablePanel: { flex: 2 },
-  resultPanel: { flex: 1 },
-  table: { width: '100%' },
-  cellInput: { width: '40px' },
-  bigButton: { marginTop: '1rem' },
-  resBox: { marginTop: '1rem' }
 };
 
 export default App;
