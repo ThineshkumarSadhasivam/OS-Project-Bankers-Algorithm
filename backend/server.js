@@ -1,10 +1,22 @@
 const express = require('express');
 const cors = require('cors');
+
 const app = express();
-app.use(cors());
+
+app.use(cors({
+    origin: ['https://your-frontend.vercel.app'],
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
+
 app.use(express.json());
 
-// Helper function: Safety Algorithm
+// Health check
+app.get('/', (req, res) => {
+    res.send('Backend is running 🚀');
+});
+
+// Safety Algorithm
 function isSafe(n, m, allocation, need, available) {
     let work = [...available];
     let finish = new Array(n).fill(false);
@@ -27,45 +39,51 @@ function isSafe(n, m, allocation, need, available) {
 
 app.post('/api/allocate-cloud', (req, res) => {
     const { tasks, available, taskIndex, request } = req.body;
-    // tasks: [{ id, allocation: [], max: [], need: [] }]
-    
+
+    if (!tasks || !available || taskIndex === undefined || !request) {
+        return res.status(400).json({ error: "Invalid input data" });
+    }
+
     const n = tasks.length;
     const m = available.length;
+
     const allocation = tasks.map(t => t.allocation);
-    const max = tasks.map(t => t.max);
     const need = tasks.map(t => t.max.map((v, i) => v - t.allocation[i]));
 
-    // Step 1: Check if request <= Need
     if (!request.every((val, i) => val <= need[taskIndex][i])) {
-        return res.json({ success: false, message: "Error: Request exceeds Task's maximum demand limit." });
+        return res.json({ success: false, message: "Request exceeds max demand." });
     }
 
-    // Step 2: Check if request <= Available
     if (!request.every((val, i) => val <= available[i])) {
-        return res.json({ success: false, message: "Cloud resources busy. Request queued (Waiting)." });
+        return res.json({ success: false, message: "Resources unavailable (waiting)." });
     }
 
-    // Step 3: Pre-tend to allocate
     let testAvailable = available.map((v, i) => v - request[i]);
+
     let testAllocation = JSON.parse(JSON.stringify(allocation));
     testAllocation[taskIndex] = testAllocation[taskIndex].map((v, i) => v + request[i]);
+
     let testNeed = JSON.parse(JSON.stringify(need));
     testNeed[taskIndex] = testNeed[taskIndex].map((v, i) => v - request[i]);
 
     const safetyCheck = isSafe(n, m, testAllocation, testNeed, testAvailable);
 
     if (safetyCheck.safe) {
-        res.json({ 
-            success: true, 
-            message: `Request Approved. Resources allocated to Task T${taskIndex}.`,
-            safeSequence: safetyCheck.sequence 
+        res.json({
+            success: true,
+            message: `Request Approved for Task T${taskIndex}`,
+            safeSequence: safetyCheck.sequence
         });
     } else {
-        res.json({ 
-            success: false, 
-            message: "Request Denied: Allocation would risk a System Deadlock.",
-            logs: ["Safety algorithm failed to find a completion sequence."]
+        res.json({
+            success: false,
+            message: "Request Denied (Deadlock risk)"
         });
     }
 });
-app.listen(5000, () => console.log('Cloud Resource Manager running on port 5000'));
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
