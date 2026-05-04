@@ -1,3 +1,4 @@
+console.log("THIS IS MY SERVER FILE");
 const express = require('express');
 const cors = require('cors');
 
